@@ -127,7 +127,7 @@ Missle* make_missle(){
 
 	missle->col=rand()%scrWidth;
 
-	missle->speed=(rand()%100)+100;
+	missle->speed=(rand()%100)+500;
 
 	missle->row=1;
 	
@@ -213,7 +213,7 @@ int main(int argc, char* argv[]){
 	pthread_create(&defense,NULL,runDefender,NULL);
 	
 	for(int t=0;t<rf.maxMissles;t++){
-		sleep(1);
+		usleep((rand()%1000+500)*1000);
 		missles[t]=make_missle();
 		pthread_create(&threads[t],NULL,runMissle,(void*) missles[t]); 
 		
