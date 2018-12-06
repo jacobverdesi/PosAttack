@@ -8,7 +8,7 @@
 #include <pthread.h>
 #include <time.h>
 pthread_mutex_t sharedLock;
-int scrWidth,scrHeight;
+int scrWidth,scrHeight,defenseHeight;
 typedef struct readData{
 	int maxMissles;
 	int defenseHeight;
@@ -25,8 +25,8 @@ struct readData createData(){
 	readData data;
 	data.player1=malloc(80);
 	data.player2=malloc(80);
+	//data.city=malloc(scrWidth);
 	data.maxMissles=0;
-	data.defenseHeight=scrHeight;
 	for(int i=0;i<scrWidth;i++){
 		data.city[i]=2;
 	}
@@ -39,7 +39,10 @@ void initScreen(){
 	noecho();
 	scrWidth=getmaxx(stdscr);
 	scrHeight=getmaxy(stdscr);
+	defenseHeight=scrHeight;
 	clear();
+	char* quitMsg="Enter 'q' to quit at end of attack, or control-C";
+	mvaddstr(0,scrWidth/2-strlen(quitMsg)/2,quitMsg);
 	refresh();
 }
 readData readFile(FILE* fp){
@@ -66,8 +69,8 @@ readData readFile(FILE* fp){
 				char* ptr;
 				ptr=strtok(line," ");
 				while(ptr!=NULL&&counter<scrWidth){
-					if(scrHeight-atoi(ptr)-3<data.defenseHeight)
-						data.defenseHeight=scrHeight-atoi(ptr)-3;		
+					if(scrHeight-atoi(ptr)-3<defenseHeight)
+						defenseHeight=scrHeight-atoi(ptr)-3;		
 					data.city[counter]=atoi(ptr);
 					counter++;
 					ptr=strtok(NULL," ");
@@ -91,27 +94,27 @@ int makeCity(readData data){
 	
 	return -1;
 }
-void* runDefender(void *args){
-	readData *data= args;
+void* runDefender(){
+	
 	int pos=scrWidth/2;
         char* paddle="#####";
-	int row=data->defenseHeight;
-        pthread_mutex_lock(&sharedLock);
+	int ch;	
+	int row=defenseHeight;
+        
+	pthread_mutex_lock(&sharedLock);
         mvaddstr(row,pos,paddle);
         pthread_mutex_unlock( &sharedLock );
-        while(true){
-		int ch=getch();
+        
+	while(getch()!='q'){
+		ch=getch();
                 pthread_mutex_lock(&sharedLock);
                 mvaddstr(row,pos,"     ");
                 if(ch==68&&pos>0){
-            		pos--;
-                	mvprintw(2,2,"%d ",pos);
+            		pos-=1;
                 }
-                if(ch==67&&pos<scrWidth){
-                        pos++;
-                	mvprintw(2,2,"%d ",pos);
+                if(ch==67&&pos+5<scrWidth){
+                        pos+=1;
                 }
-	        //mvaddch(2,2,pos);
 		mvaddstr(row,pos,paddle);
                 refresh();
                 pthread_mutex_unlock( &sharedLock );
@@ -119,40 +122,69 @@ void* runDefender(void *args){
 	return NULL;
 }
 Missle* make_missle(){
+	
 	Missle* missle=malloc(sizeof(Missle));
+
 	missle->col=rand()%scrWidth;
+
 	missle->speed=(rand()%100)+100;
+
 	missle->row=1;
+	
 	return missle;
+}
+char ahead(Missle* curr){
+	return mvinch(curr->row+1,curr->col);
 }
 void* runMissle(void* missle){
 	Missle *curr=missle;
  	pthread_mutex_lock( &sharedLock );
 	mvaddch(curr->row,curr->col,'|');
 	pthread_mutex_unlock( &sharedLock );	
-	while(mvinch(curr->row+1,curr->col)==' '){
-		usleep(1000*curr->speed);
+	while(ahead(curr)==' '||(ahead(curr)=='?'&& mvinch(curr->row+2,curr->col)==' ')){
 		curr->row++;
 		pthread_mutex_lock( &sharedLock );
 	        mvaddch(curr->row,curr->col,'|');
 		mvaddch(curr->row-1,curr->col,' ');
 	        refresh();
 	        pthread_mutex_unlock( &sharedLock );	
+		usleep(1000*curr->speed);
 	}
+	if(ahead(curr)=='?'&&curr->row+2!=defenseHeight&& curr->row<=scrHeight-4){
+		curr->row++;
+		pthread_mutex_lock( &sharedLock );
+	        mvaddch(curr->row,curr->col,'|');
+		mvaddch(curr->row-1,curr->col,' ');
+	        refresh();
+	        pthread_mutex_unlock( &sharedLock );	
+		usleep(1000*curr->speed);
+		curr->row++;
+	        mvaddch(curr->row,curr->col,'|');
+		pthread_mutex_lock( &sharedLock );
+		mvaddch(curr->row-1,curr->col,' ');
+	        refresh();
+	        pthread_mutex_unlock( &sharedLock );	
+		usleep(1000*curr->speed);
+		curr->row--;
+	}	
+	if(ahead(curr)=='#')
+		curr->row--;
+	
 	pthread_mutex_lock( &sharedLock );
 	mvaddch(curr->row+1,curr->col,'?');
 	mvaddch(curr->row+2,curr->col,'*');
 	mvaddch(curr->row,curr->col,' ');
-	mvaddch(curr->row-1,curr->col,' ');
 	pthread_mutex_unlock( &sharedLock );	
 	refresh();
 	return NULL;
 }
 int main(int argc, char* argv[]){
+	
 	if(argc!=2){
 		printf("Usage: ./threads config-file\n");
 		exit(EXIT_FAILURE);
 	}
+
 	initScreen();
 
 	FILE *fp;
@@ -163,33 +195,40 @@ int main(int argc, char* argv[]){
 	}
 	readData rf=readFile(fp);
 	fclose(fp);
-	//if(rf==NULL){
-	//	printf("Invalid config file");
-	//	exit(EXIT_FAILURE);
-	//}
-	makeCity(rf);	
+	/*if(rf==NULL){
+		printf("Invalid config file");
+		exit(EXIT_FAILURE);
+	}*/
+	makeCity(rf);
+	srand(time(NULL));	
 	void *retval;
+	
 	Missle* missles[rf.maxMissles];
 	for(int t=0;t<rf.maxMissles;t++){
-		missles[t]=make_missle();
+	
 	}
+	pthread_mutex_init(&sharedLock,NULL);
 	pthread_t threads[rf.maxMissles];
 	pthread_t defense;	
-//	pthread_mutex_init(&sharedLock,NULL);
-	pthread_create(&defense,NULL,runDefender,&rf);
+	pthread_create(&defense,NULL,runDefender,NULL);
+	
 	for(int t=0;t<rf.maxMissles;t++){
+		sleep(1);
+		missles[t]=make_missle();
 		pthread_create(&threads[t],NULL,runMissle,(void*) missles[t]); 
+		
 	}
+	
 	for(int t=0; t< rf.maxMissles;t++){
 		pthread_join(threads[t],&retval);
 	}
-	getch();
+	pthread_join(defense,&retval);
+	
+	while(getch()!='q'){
+	}
+	
+	clear();
 	endwin();
-/*	for(int i =0;i<scrWidth;i++){
-		printf("%d ",rf.city[i]);
-		if(i%10==0)
-			printf("\n");
-	}*/
-	printf("MAX MISSLES: %d\n",rf.defenseHeight);
+	
 	return 0;
 }
