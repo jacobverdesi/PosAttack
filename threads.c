@@ -8,31 +8,32 @@
 #include <pthread.h>
 #include <time.h>
 pthread_mutex_t sharedLock;
+
 int scrWidth,scrHeight,defenseHeight;
 typedef struct readData{
 	int maxMissles;
 	int defenseHeight;
 	char* player1;
 	char* player2; 	
-	int city[256];
+	int city[1024];
 }readData;
 typedef struct Missle{
 	int speed;
 	int row;
 	int col;
+	int infinite;
 }Missle;
 struct readData createData(){
 	readData data;
 	data.player1=malloc(80);
 	data.player2=malloc(80);
 	//data.city=malloc(scrWidth);
-	data.maxMissles=0;
+	data.maxMissles=-1;
 	for(int i=0;i<scrWidth;i++){
 		data.city[i]=2;
 	}
 	return data;
 }
-
 void initScreen(){
 	initscr();
 	cbreak();
@@ -57,10 +58,10 @@ readData readFile(FILE* fp){
 		if(line[0]!='#'){
 			row++;
 			if(row==1){
-				data.player1=line;
+				strcpy(data.player1,line);
 			}
 			else if( row==2){
-				data.player2=line;
+				strcpy(data.player2,line);
 			}
 			else if( row==3){
 				data.maxMissles=atoi(line);
@@ -77,6 +78,18 @@ readData readFile(FILE* fp){
 				}
 			}
 		}
+	
+	}
+	if(data.player1==NULL){	
+		exit(EXIT_FAILURE);
+	}
+	if(data.player2==NULL){
+		printf("Error: missing attacker name.");	
+		exit(EXIT_FAILURE);
+	}
+	if(data.maxMissles==-1){
+		printf("Invalid config file");	
+		exit(EXIT_FAILURE);
 	}
 	return data;
 }
@@ -105,8 +118,7 @@ void* runDefender(){
         mvaddstr(row,pos,paddle);
         pthread_mutex_unlock( &sharedLock );
         
-	while(getch()!='q'){
-		ch=getch();
+	while((ch=getch())!='q'){
                 pthread_mutex_lock(&sharedLock);
                 mvaddstr(row,pos,"     ");
                 if(ch==68&&pos>0){
@@ -119,6 +131,7 @@ void* runDefender(){
                 refresh();
                 pthread_mutex_unlock( &sharedLock );
         }
+
 	return NULL;
 }
 Missle* make_missle(){
@@ -127,7 +140,8 @@ Missle* make_missle(){
 
 	missle->col=rand()%scrWidth;
 
-	missle->speed=(rand()%100)+500;
+	missle->speed=(rand()%200)+100;
+	missle->infinite=0;
 
 	missle->row=1;
 	
@@ -176,7 +190,30 @@ void* runMissle(void* missle){
 	mvaddch(curr->row,curr->col,' ');
 	pthread_mutex_unlock( &sharedLock );	
 	refresh();
+	if(curr->infinite==1){
+		curr->row=1;
+		curr->col=rand()%scrWidth;
+		curr->speed=(rand()%200)+100;
+		runMissle(curr);
+	}
 	return NULL;
+}
+void endScreen(readData rf){
+	
+	pthread_mutex_lock( &sharedLock );
+	mvaddstr(2,scrWidth/2-strlen(rf.player2)-4,"The ");
+	mvaddstr(2,scrWidth/2-strlen(rf.player2),rf.player2);
+	mvaddstr(2,scrWidth/2," attacker has ended");
+	pthread_mutex_unlock( &sharedLock );	
+	refresh();
+	
+	pthread_mutex_lock( &sharedLock );
+	mvaddstr(4,scrWidth/2-strlen(rf.player1)-4,"The ");
+	mvaddstr(4,scrWidth/2-strlen(rf.player1),rf.player1);
+	mvaddstr(4,scrWidth/2," defender has ended");
+	mvaddstr(5,scrWidth/2-strlen(rf.player1)-4,"hit enter to close...");
+	pthread_mutex_unlock( &sharedLock );	
+	refresh();
 }
 int main(int argc, char* argv[]){
 	
@@ -197,38 +234,39 @@ int main(int argc, char* argv[]){
 	fclose(fp);
 	/*if(rf==NULL){
 		printf("Invalid config file");
-		exit(EXIT_FAILURE);
+	exit(EXIT_FAILURE);
 	}*/
 	makeCity(rf);
 	srand(time(NULL));	
 	void *retval;
-	
-	Missle* missles[rf.maxMissles];
-	for(int t=0;t<rf.maxMissles;t++){
-	
+	int infinite=0;
+	if(rf.maxMissles==0){
+		rf.maxMissles=10;
+		infinite=1;
 	}
+	Missle* missles[rf.maxMissles];
 	pthread_mutex_init(&sharedLock,NULL);
 	pthread_t threads[rf.maxMissles];
 	pthread_t defense;	
 	pthread_create(&defense,NULL,runDefender,NULL);
-	
 	for(int t=0;t<rf.maxMissles;t++){
 		usleep((rand()%1000+500)*1000);
 		missles[t]=make_missle();
+		if(infinite==1)
+			missles[t]->infinite=1;
 		pthread_create(&threads[t],NULL,runMissle,(void*) missles[t]); 
-		
 	}
 	
 	for(int t=0; t< rf.maxMissles;t++){
 		pthread_join(threads[t],&retval);
 	}
 	pthread_join(defense,&retval);
-	
+		
+	endScreen(rf);	
 	while(getch()!='q'){
 	}
-	
 	clear();
 	endwin();
-	
+	printf("%s , %s\n",rf.player1,rf.player2);
 	return 0;
 }
