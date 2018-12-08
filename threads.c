@@ -102,7 +102,6 @@ readData readFile(FILE* fp){
 				data.maxMissles=atoi(line);
 			}
 			else{
-				printf("%s\n",line);
 				char* ptr;
 				if(row==4&&(line==NULL||line[0]=='\0')){
 					fprintf(stderr,"missing city layout\n");
@@ -121,12 +120,12 @@ readData readFile(FILE* fp){
 			counter=0;
 		}
 	}
-	printf("Test");
-	if(data.player1==NULL){
+	free(line);
+	if(data.player1==NULL||data.player1[0]=='\0'){
 		fprintf(stderr,"Error: missing defender name.\n");	
 		exit(EXIT_FAILURE);
 	}
-	if(data.player2==NULL){
+	if(data.player2==NULL||data.player2[0]=='\0'){
 		fprintf(stderr,"Error: missing attacker name.\n");	
 		exit(EXIT_FAILURE);
 	}
@@ -145,12 +144,12 @@ readData readFile(FILE* fp){
  */
 int makeCity(readData data){
 	for(int i=0;i<scrWidth;i++){
-		/*
+		
 		if(i==0&&data.city[i+1]>=data.city[i])
 			mvaddch(scrHeight-data.city[i],i,'_');
 		if(i==scrWidth-1&&data.city[i-1]>=data.city[i]){
 			mvaddch(scrHeight-data.city[i],i,'_');
-		}*/
+		}
 		if(data.city[i-1] >= data.city[i]&&data.city[i+1]>=data.city[i])
 			mvaddch(scrHeight-data.city[i],i,'_');
 		for(int j=1;j<data.city[i]-1;j++){	
@@ -270,6 +269,7 @@ void* runMissle(void* missle){
 	}
 	return NULL;
 }
+
 /*
  * displays the end screen msgs
  */
@@ -344,8 +344,17 @@ int main(int argc, char* argv[]){
 	}
 		
 	endScreen(rf);	
+	int ch;
+	while((ch=getch())!='q'){
+	}
 	pthread_join(defense,&retval);
 	clear();
 	endwin();
+	for(int t=0; t< rf.maxMissles;t++){
+		free(missles[t]);
+	}
+	free(rf.player1);
+	free(rf.player2);
+
 	return 0;
 }
