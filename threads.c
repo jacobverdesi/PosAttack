@@ -144,7 +144,6 @@ readData readFile(FILE* fp){
  */
 int makeCity(readData data){
 	for(int i=0;i<scrWidth;i++){
-		
 		if(i==0&&data.city[i+1]>=data.city[i])
 			mvaddch(scrHeight-data.city[i],i,'_');
 		if(i==scrWidth-1&&data.city[i-1]>=data.city[i]){
@@ -159,7 +158,6 @@ int makeCity(readData data){
 		}
 		refresh();
 	}
-	
 	return -1;
 }
 /*
@@ -204,7 +202,7 @@ Missle* make_missle(){
 
 	missle->col=rand()%scrWidth;
 
-	missle->speed=(rand()%100)+100;
+	missle->speed=(rand()%50)+100;
 	missle->infinite=0;
 
 	missle->row=2;
@@ -264,7 +262,7 @@ void* runMissle(void* missle){
 	if(curr->infinite==1){
 		curr->row=1;
 		curr->col=rand()%scrWidth;
-		curr->speed=(rand()%200)+100;
+		curr->speed=(rand()%50)+100;
 		runMissle(curr);
 	}
 	return NULL;
@@ -332,7 +330,7 @@ int main(int argc, char* argv[]){
 	pthread_t defense;	
 	pthread_create(&defense,NULL,runDefender,NULL);
 	for(int t=0;t<rf.maxMissles;t++){
-		usleep((rand()%1000+500)*1000);
+		usleep((rand()%1000+500)*500);
 		missles[t]=make_missle();
 		if(infinite==1)
 			missles[t]->infinite=1;
